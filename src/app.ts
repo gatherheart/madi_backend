@@ -8,7 +8,7 @@ import Controller from "./interfaces/controller.interface";
 import User from "./models/user.model";
 
 import "dotenv/config";
-import { isAuthenticated } from "./passport";
+import { isAuthenticated, authenticateKakao } from "./passport";
 
 const BASE_URL = process.env.BASE_URL;
 
@@ -36,18 +36,16 @@ class App {
   }
 
   private initializeMiddlewares() {
-    this.app.express.use(passport.initialize());
-
     this.app.express.use(
-      expressSession({
-        secret: "keyboard cat",
-        cookie: { maxAge: 60 * 60 * 1000 },
-
+      require("express-session")({
+        secret: "Rusty is the worst and ugliest dog in the wolrd",
         resave: true,
         saveUninitialized: true,
       })
     );
+    this.app.express.use(passport.initialize());
     this.app.express.use(passport.session());
+
     this.app.express.use(logger("dev"));
     this.app.express.get(
       "/login",
@@ -55,19 +53,27 @@ class App {
     );
 
     this.app.express.get("/oauth", function (req: any, res: any, next: any) {
+      console.log(req);
       passport.authenticate("kakao", function (err, user) {
         console.log("passport.authenticate(kakao)실행");
         if (!user) {
+          console.log("Redirect to /login");
           return res.redirect("/login");
         }
         req.logIn(user, function (err: any) {
           console.log("kakao/callback user : ");
+          console.log("Redirect to /");
           return res.redirect("/");
         });
       })(req, res);
     });
-    this.app.express.get("/test", isAuthenticated, (req, res) => {
-      res.send("GOod");
+
+    this.app.express.get("/test", (req, res) => {
+      if (req.isAuthenticated()) {
+        return res.send("Good");
+      } else {
+        return res.send("not logined");
+      }
     });
     //this.app.use(bodyParser.json());
     //this.app.use(cookieParser());
@@ -95,7 +101,7 @@ class App {
           callbackURL: `/oauth`,
         },
         function (accessToken, refreshToken, profile, done) {
-          console.log(profile);
+          console.log(accessToken);
           User.findOne(
             {
               "kakao.id": profile.id,
