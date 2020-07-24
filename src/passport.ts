@@ -1,20 +1,19 @@
 import * as passport from "passport";
 import { Strategy, ExtractJwt } from "passport-jwt";
-import jwt from "jsonwebtoken";
+import * as jwt from "jsonwebtoken";
+import User from "./models/user.model";
 
-const jwtOptions = {
+export const jwtOptions = {
   jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
   secretOrKey: process.env.JWT_SECRET,
 };
-export const generateToken = (id: any) =>
-  jwt.sign({ id }, process.env.JWT_SECRET);
+export const generateToken = (id: string, username: string) =>
+  jwt.sign({ id, username }, process.env.JWT_SECRET || "salt");
 
-const verifyUser = async (
-  payload: { id: any },
-  done: (arg0: null, arg1: boolean) => any
-) => {
+const verifyUser = async (payload: any, done: any) => {
+  console.log(payload);
   try {
-    const user = await prisma.user({ id: payload.id });
+    const user = await User.find({ facebookId: payload.id });
     if (user !== null) {
       return done(null, user);
     } else {
@@ -25,35 +24,34 @@ const verifyUser = async (
   }
 };
 
-export const authenticateJwt = (
-  req: { user: any },
-  res: any,
-  next: () => void
-) =>
+export const authenticateJwt = (req: any, res: any, next: () => void) =>
   passport.authenticate("jwt", { session: false }, (error: any, user: any) => {
-    if (user) {
-      req.user = user;
-    }
-    next();
-  })(req, res, next);
-
-passport.use(new Strategy(jwtOptions, verifyUser));
-passport.initialize();
-export const isAuthenticated = (req: any, res: any, next: any) => {
-  passport.authenticate("kakao", function (err, user) {
     console.log(user);
-    if (!user) {
-      console.log("NO USER", "Redirection");
-      return res.redirect("/login");
-    }
-  })(req, res);
-};
 
-export const authenticateKakao = (req: any, res: any, next: any) => {
-  passport.authenticate("kakao", { session: false }, (error, user) => {
     if (user) {
       req.user = user;
-    }
+    } else console.log("no user");
     next();
   })(req, res, next);
+
+export const isAuthenticated = (request: any) => {
+  if (!request.user) {
+    throw Error("You need to log in to perform this action");
+  }
+  return;
 };
+passport.initialize();
+passport.use(new Strategy(jwtOptions, verifyUser));
+
+passport.serializeUser((user, done) => {
+  // Strategy 성공 시 호출됨
+  console.log("serializeUser", user);
+  done(null, user); // 여기의 user._id가 req.session.passport.user에 저장
+});
+passport.deserializeUser((id, done) => {
+  // 매개변수 id는 req.session.passport.user에 저장된 값
+  User.findById(id, (err, user) => {
+    console.log("deserializeUser", user);
+    done(null, user); // 여기의 user가 req.user가 됨
+  });
+});

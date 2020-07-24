@@ -1,41 +1,30 @@
 import * as mongoose from "mongoose";
 import * as crypto from "crypto";
 
+interface IUserSchema extends mongoose.Document {
+  name: string;
+  provider: string;
+  facebookId: string;
+  updated?: string;
+  created: string;
+}
+
 const UserSchema = new mongoose.Schema({
   name: {
     type: String,
     trim: true,
     required: "Name is required",
   },
-  username: {
-    type: String,
-    trim: true,
-    required: "UserName is required",
-  },
-  roles: {
-    type: Array,
-    required: "Roles are required",
-  },
   provider: {
     type: String,
     required: "",
   },
-  kakao: {
-    type: JSON,
-  },
-
-  salt: String,
+  facebookId: { type: String },
   updated: Date,
   created: {
     type: Date,
     default: Date.now,
   },
-  seller: {
-    type: Boolean,
-    default: false,
-  },
-  stripe_seller: {},
-  stripe_customer: {},
 });
 
 UserSchema.methods = {
@@ -58,4 +47,4 @@ UserSchema.methods = {
   },
 };
 
-export default mongoose.model("User", UserSchema);
+export default mongoose.model<IUserSchema>("User", UserSchema);

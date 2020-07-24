@@ -1,15 +1,34 @@
 import { GraphQLServer } from "graphql-yoga";
 import * as logger from "morgan";
-import * as passport from "passport";
+import * as bodyParser from "body-parser";
+import * as cookieParser from "cookie-parser";
 import * as expressSession from "express-session";
-import { Strategy as KakaoStrategy } from "passport-kakao";
+import { Strategy as FacebookStrategy } from "passport-facebook";
 import * as mongoose from "mongoose";
 import Controller from "./interfaces/controller.interface";
 import User from "./models/user.model";
 
 import "dotenv/config";
-import { isAuthenticated, authenticateKakao } from "./passport";
+import "./passport";
+import { authenticateJwt, generateToken } from "./passport";
 
+/**
+ * 
+{
+    "domain": "34.64.251.108",
+    "hostOnly": true,
+    "httpOnly": true,
+    "name": "connect.sid",
+    "path": "/",
+    "sameSite": "unspecified",
+    "secure": false,
+    "session": true,
+    "storeId": "0",
+    "value": "s%3AKY9BLk4RBjwr69wrzIhTPAhwXgxl-TsH.bcBOSLtl05T5paaSfR%2FkJh4C1Zo3X009RMl6qc7Mvkg",
+    "id": 1
+}
+]
+ */
 const BASE_URL = process.env.BASE_URL;
 
 class App {
@@ -36,47 +55,12 @@ class App {
   }
 
   private initializeMiddlewares() {
-    this.app.express.use(
-      require("express-session")({
-        secret: "Rusty is the worst and ugliest dog in the wolrd",
-        resave: true,
-        saveUninitialized: true,
-      })
-    );
-    this.app.express.use(passport.initialize());
-    this.app.express.use(passport.session());
-
     this.app.express.use(logger("dev"));
-    this.app.express.get(
-      "/login",
-      passport.authenticate("kakao", { state: "myStateValue" })
-    );
 
-    this.app.express.get("/oauth", function (req: any, res: any, next: any) {
-      console.log(req);
-      passport.authenticate("kakao", function (err, user) {
-        console.log("passport.authenticate(kakao)실행");
-        if (!user) {
-          console.log("Redirect to /login");
-          return res.redirect("/login");
-        }
-        req.logIn(user, function (err: any) {
-          console.log("kakao/callback user : ");
-          console.log("Redirect to /");
-          return res.redirect("/");
-        });
-      })(req, res);
-    });
-
-    this.app.express.get("/test", (req, res) => {
-      if (req.isAuthenticated()) {
-        return res.send("Good");
-      } else {
-        return res.send("not logined");
-      }
-    });
-    //this.app.use(bodyParser.json());
-    //this.app.use(cookieParser());
+    // Initialize Passport and restore authentication state, if any, from the
+    // session.
+    this.app.use(bodyParser.json());
+    this.app.use(cookieParser());
   }
 
   private initializeErrorHandling() {
@@ -84,66 +68,64 @@ class App {
   }
 
   private initializeControllers(controllers: Controller[]) {
-    /*
-    controllers.forEach((controller) => {
-      this.app.use("/", controller.router);
+    // Define routes.
+    this.app.express.get("/", function (req, res) {
+      res.json({ message: "home", user: req.user });
     });
-    */
+
+    this.app.express.get("/login/facebook", function (req, res, next) {
+      console.log(req.query);
+      const { username, email, id } = req.query;
+      if (
+        typeof username !== "string" ||
+        typeof email !== "string" ||
+        typeof id !== "string"
+      )
+        return res.json({ message: "Error", user: req.user });
+
+      User.findOne(
+        {
+          facebookId: id,
+        },
+        function (err, user) {
+          if (err) {
+            return next(err);
+          }
+          if (!user) {
+            user = new User({
+              name: username,
+              email: email,
+              facebookId: id,
+              provider: "facebook",
+              created: new Date(),
+            });
+
+            user.save(function (err) {
+              if (err) {
+                console.log(err);
+              }
+              console.log("SAVE ######", generateToken(id, username));
+              return generateToken(id, username);
+            });
+          } else {
+            console.log("ALready#$$", generateToken(id, username));
+            return generateToken(id, username);
+          }
+        }
+      );
+    });
+
+    this.app.express.get("/test", authenticateJwt, (req, res) => {
+      if (req.isAuthenticated()) {
+        return res.send("Good");
+      } else {
+        return res.send("not logined");
+      }
+    });
   }
+
   private initializePassport() {
     const PORT = process.env.PORT;
-
-    passport.use(
-      new KakaoStrategy(
-        {
-          clientID: "ea6f8065edc4eeaca91beaf985d1db70",
-          clientSecret: "", // clientSecret을 사용하지 않는다면 넘기지 말거나 빈 스트링을 넘길 것
-          callbackURL: `/oauth`,
-        },
-        function (accessToken, refreshToken, profile, done) {
-          console.log(accessToken);
-          User.findOne(
-            {
-              "kakao.id": profile.id,
-            },
-            function (err, user) {
-              if (err) {
-                return done(err);
-              }
-              if (!user) {
-                user = new User({
-                  name: profile.username,
-                  username: profile.id,
-                  roles: ["authenticated"],
-                  provider: "kakao",
-                  kakao: profile._json,
-                });
-
-                user.save(function (err) {
-                  if (err) {
-                    console.log(err);
-                  }
-                  console.log("SAVE ######");
-                  return done(err, user);
-                });
-              } else {
-                return done(err, user);
-              }
-            }
-          );
-        }
-      )
-    );
-    passport.serializeUser((user: { _id: String }, done) => {
-      // Strategy 성공 시 호출됨
-      done(null, user._id); // 여기의 user._id가 req.session.passport.user에 저장
-    });
-    passport.deserializeUser((id, done) => {
-      // 매개변수 id는 req.session.passport.user에 저장된 값
-      User.findById(id, (err, user) => {
-        done(null, user); // 여기의 user가 req.user가 됨
-      });
-    });
   }
   private connectToTheDatabase() {
     const { MONGO_USER, MONGO_PASSWORD, MONGO_PATH } = process.env;
