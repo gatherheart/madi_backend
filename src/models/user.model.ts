@@ -2,11 +2,14 @@ import * as mongoose from "mongoose";
 import * as crypto from "crypto";
 
 interface IUserSchema extends mongoose.Document {
+  authenticate(password: any): boolean;
   name: string;
   provider: string;
   facebookId: string;
+  email: String;
   updated?: string;
   created: string;
+  refreshToken: string;
 }
 
 const UserSchema = new mongoose.Schema({
@@ -19,11 +22,22 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: "",
   },
+  email: {
+    type: String,
+  },
+  hashed_password: {
+    type: String,
+    required: "Password is required"
+  },
   facebookId: { type: String },
   updated: Date,
   created: {
     type: Date,
     default: Date.now,
+  },
+  refreshToken: {
+    type: String,
+    required: "required token",
   },
 });
 

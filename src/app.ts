@@ -6,11 +6,11 @@ import * as expressSession from "express-session";
 import { Strategy as FacebookStrategy } from "passport-facebook";
 import * as mongoose from "mongoose";
 import Controller from "./interfaces/controller.interface";
-import User from "./models/user.model";
 
 import "dotenv/config";
 import "./passport";
-import { authenticateJwt, generateToken } from "./passport";
+import { authenticateJwt, generateToken, isAuthenticated } from "./passport";
+import { facebookLogin } from "./controllers/auth.controller";
 
 /**
  * 
@@ -59,8 +59,9 @@ class App {
 
     // Initialize Passport and restore authentication state, if any, from the
     // session.
-    this.app.use(bodyParser.json());
-    this.app.use(cookieParser());
+    this.app.express.use(bodyParser.json());
+    this.app.express.use(cookieParser());
+    this.app.express.use(authenticateJwt);
   }
 
   private initializeErrorHandling() {
@@ -73,54 +74,11 @@ class App {
       res.json({ message: "home", user: req.user });
     });
 
-    this.app.express.get("/login/facebook", function (req, res, next) {
-      console.log(req.query);
-      const { username, email, id } = req.query;
-      if (
-        typeof username !== "string" ||
-        typeof email !== "string" ||
-        typeof id !== "string"
-      )
-        return res.json({ message: "Error", user: req.user });
+    
+    this.app.express.get("/login/facebook", facebookLogin);
 
-      User.findOne(
-        {
-          facebookId: id,
-        },
-        function (err, user) {
-          if (err) {
-            return next(err);
-          }
-          if (!user) {
-            user = new User({
-              name: username,
-              email: email,
-              facebookId: id,
-              provider: "facebook",
-              created: new Date(),
-            });
-
-            user.save(function (err) {
-              if (err) {
-                console.log(err);
-              }
-              console.log("SAVE ######", generateToken(id, username));
-              return generateToken(id, username);
-            });
-          } else {
-            console.log("ALready#$$", generateToken(id, username));
-            return generateToken(id, username);
-          }
-        }
-      );
-    });
-
-    this.app.express.get("/test", authenticateJwt, (req, res) => {
-      if (req.isAuthenticated()) {
-        return res.send("Good");
-      } else {
-        return res.send("not logined");
-      }
+    this.app.express.get("/test", isAuthenticated, (req, res) => {
+      return res.send("Good");
     });
   }
 

@@ -34,11 +34,13 @@ export const authenticateJwt = (req: any, res: any, next: () => void) =>
     next();
   })(req, res, next);
 
-export const isAuthenticated = (request: any) => {
+export const isAuthenticated = (request: any, response: any, next: any) => {
   if (!request.user) {
-    throw Error("You need to log in to perform this action");
+    return response.status("403").json({
+      error: "User is not authorized",
+    });
   }
-  return;
+  next();
 };
 passport.initialize();
 passport.use(new Strategy(jwtOptions, verifyUser));
